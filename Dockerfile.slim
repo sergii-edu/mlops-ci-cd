@@ -1,0 +1,15 @@
+FROM python:3.9-slim AS builder
+WORKDIR /build
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir torch torchvision pillow
+COPY export_model.py ./
+RUN python export_model.py
+
+FROM python:3.9-slim AS runtime
+WORKDIR /app
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir torch pillow
+COPY inference.py /app/inference.py
+COPY --from=builder /build/model.pt /app/model.pt
+COPY --from=builder /build/labels.json /app/labels.json
+ENTRYPOINT ["python", "inference.py"]

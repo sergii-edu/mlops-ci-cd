@@ -1,0 +1,31 @@
+FAT vs SLIM — Порівняння
+
+Команди для зборки:
+  docker build -t ml-fat -f Dockerfile.fat .
+  docker build -t ml-slim -f Dockerfile.slim .
+
+Вимірювання:
+- Розмір образу (docker images):
+  * ml-fat: 963.07 K
+  * ml-slim: 668.48 K
+  * Співвідношення (fat/slim): 1.44×
+
+- Кількість шарів (docker history <image> | wc -l):
+  * ml-fat: 12
+  * ml-slim: 16
+
+Спостереження щодо "жирного" образу:
+- Зайві утиліти/пакети: —
+- Більше шарів і більший attack surface
+- Довший час збірки/завантаження
+
+Оптимізації у slim:
+- multi-stage: модель і labels формуються в builder
+- у runtime лише необхідні залежності (torch + pillow)
+- pip --no-cache-dir, мінімальна база
+
+Подальші покращення:
+- Використати distroless/python як runtime
+- Прибрати build-tools з runtime, мінімізувати залежності
+- Quantization/PTQ, TorchScript-lite або ONNX Runtime
+- .dockerignore — не пакувати кеші/venv/великі файли
