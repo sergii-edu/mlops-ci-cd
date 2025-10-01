@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlflow
+  namespace: infra-tools
+spec:
+  project: default
+  source:
+    repoURL: https://charts.bitnami.com/bitnami
+    chart: mlflow
+    targetRevision: ">=0.0.0"   # Рекомендовано зафіксувати конкретну версію
+    helm:
+      values: |
+        service:
+          type: ClusterIP
+        replicaCount: 1
+        image:
+          debug: false
+        database:
+          enabled: true
+          postgresql:
+            primary:
+              persistence:
+                enabled: false
+            auth:
+              username: mlflow
+              password: mlflowpass
+              database: mlflow
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: application
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

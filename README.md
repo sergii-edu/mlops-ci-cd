@@ -1,85 +1,90 @@
-# MLOps Infrastructure with ArgoCD and MLflow
+# Lesson 7 — Mono‑repo: Terraform (ArgoCD) + GitOps (MLflow)
 
-Цей репозиторій містить MLOps інфраструктуру, розгорнуту на AWS EKS з використанням Terraform та ArgoCD.
+У цьому моно‑репозиторії одночасно зберігаються:
+- `terraform/argocd` — Terraform, який встановлює ArgoCD (helm_release) у `infra-tools`, вмикає ApplicationSet.
+- `gitops/` — папки, які читає ArgoCD ApplicationSet і з яких створюються `Application` (наприклад, MLflow).
 
-## Структура проекту
+> У реальних проєктах IaC і GitOps зазвичай — окремі репозиторії. Тут вони поєднані **для зручності здачі ДЗ**.
 
-```
-├── argocd/                     # Terraform конфігурація для ArgoCD
-│   ├── main.tf                 # Основна конфігурація Helm релізу ArgoCD
-│   ├── variables.tf            # Змінні для Terraform
-│   ├── outputs.tf              # Вихідні значення
-│   ├── terraform.tf            # Конфігурація провайдерів
-│   ├── backend.tf              # Локальний Terraform State
-│   └── values/
-│       └── argocd-values.yaml  # Helm values для ArgoCD
-└── applications/
-    └── application.yaml        # ArgoCD Application з MLflow ресурсами
-```
+---
 
-## Розгортання
+## Кроки запуску
 
-### 1. Розгортання ArgoCD через Terraform
+### 0) Підготуйте URL цього ж репозиторію
+- Запуште цей код на GitHub у репозиторій `<this-repo>`.
+- Створіть гілку **lesson-7** (вимога LMS).
 
+### 1) Оновіть змінні Terraform
+У файлі `terraform/argocd/variables.tf` змініть:
+- `app_repo_url` → `https://github.com/<your-account>/<this-repo>.git`
+- `app_repo_branch` → `lesson-7` (або іншу гілку, яку будете пушити)
+
+Також перевірте:
+- `aws_profile`, `aws_region`
+- `eks_state_bucket`, `eks_state_key`, `eks_state_region` — щоб вказували на ваш **remote state EKS**
+
+### 2) Розгорніть ArgoCD через Terraform
 ```bash
-cd argocd
-terraform init
+cd terraform/argocd
+terraform init -reconfigure
 terraform plan
 terraform apply
 ```
-
-### 2. Отримання паролю ArgoCD
-
+Перевірте pod-и:
 ```bash
-kubectl -n infra-tools get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl get pods -n infra-tools
 ```
 
-### 3. Доступ до ArgoCD UI
-
+### 3) Вхід у UI ArgoCD
 ```bash
+# пароль адміністратора
+kubectl -n infra-tools get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+
+# локальний доступ
 kubectl port-forward svc/argocd-server -n infra-tools 8080:80
 ```
+Відкрийте `http://localhost:8080` (login: `admin`, password: з команди вище).
 
-ArgoCD UI: http://localhost:8080
-
-- Логін: `admin`
-- Пароль: отриманий на кроці 2
-
-### 4. Розгортання MLflow через GitOps
-
+### 4) Перевірте ApplicationSet
 ```bash
-kubectl apply -f application/application.yaml
+kubectl -n infra-tools get deploy argocd-applicationset-controller
+kubectl -n infra-tools get applicationsets.argoproj.io
 ```
 
-### 5. Доступ до MLflow UI
+### 5) Переконайтеся, що створився застосунок MLflow
+ApplicationSet сканує **цей самий репозиторій** за шляхами:
+- `gitops/namespaces/*`
+- `gitops/apps/*`
 
+Має з’явитися `Application` з ім’ям **mlflow** (із `gitops/apps/mlflow/application.yaml`).
+
+CLI:
 ```bash
-kubectl port-forward -n mlflow svc/mlflow-service 5000:5000
+kubectl -n infra-tools get applications.argoproj.io
 ```
 
-MLflow UI: http://localhost:5000
+UI: перевірте статус синхронізації; має створити ресурси в namespace `application`.
 
-## Основні команди
-
-### Моніторинг стану
-
+### 6) Перевірка подів і доступу
 ```bash
-# Перевірка статусу ArgoCD додатків
-kubectl get applications -n infra-tools
-
-# Перевірка статусу MLflow
-kubectl get all -n mlflow
-
-# Перегляд логів MLflow
-kubectl logs -n mlflow deployment/mlflow-server --tail=50
+kubectl get pods -n application
+kubectl -n application get deploy,svc
+# локальний доступ (ім'я деплойменту див. у виводі get deploy)
+kubectl -n application port-forward deploy/<mlflow-deploy-name> 5000:5000
+# тепер відкрийте http://localhost:5000
 ```
 
-### Керування додатками
+---
 
+## Знищення ресурсів (обовʼязково після перевірки)
 ```bash
-# Примусова синхронізація ArgoCD
-kubectl annotate app mlflow-app -n infra-tools argocd.argoproj.io/refresh=hard --overwrite
-
-# Перезапуск MLflow deployment
-kubectl rollout restart deployment/mlflow-server -n mlflow
+cd terraform/argocd
+terraform destroy
 ```
+
+## Примітки
+- `argocd-values.yaml` містить ClusterIP, extraArgs, RBAC, timeouts і `applicationSet.enabled: true`.
+- У `gitops/apps/mlflow/application.yaml` зафіксуйте конкретну версію `targetRevision` під ваш кластер/Helm.
+- Якщо потрібно, можете додати інші апки під `gitops/apps/<app-name>/application.yaml` — ApplicationSet підхопить їх автоматично.
+
+Успіхів! 🚀
