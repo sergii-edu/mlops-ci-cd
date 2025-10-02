@@ -1,90 +1,80 @@
-# Lesson 7 — Mono‑repo: Terraform (ArgoCD) + GitOps (MLflow)
+# GOIT ArgoCD Project (Mono-repo)
 
-У цьому моно‑репозиторії одночасно зберігаються:
-- `terraform/argocd` — Terraform, який встановлює ArgoCD (helm_release) у `infra-tools`, вмикає ApplicationSet.
-- `gitops/` — папки, які читає ArgoCD ApplicationSet і з яких створюються `Application` (наприклад, MLflow).
-
-> У реальних проєктах IaC і GitOps зазвичай — окремі репозиторії. Тут вони поєднані **для зручності здачі ДЗ**.
+## 📖 Опис
+Mono-repo підхід: в одному репозиторії міститься як Terraform (EKS + ArgoCD), так і GitOps-конфіги (Application, Namespaces).
 
 ---
 
-## Кроки запуску
+## 🚀 Як запустити
 
-### 0) Підготуйте URL цього ж репозиторію
-- Запуште цей код на GitHub у репозиторій `<this-repo>`.
-- Створіть гілку **lesson-7** (вимога LMS).
-
-### 1) Оновіть змінні Terraform
-У файлі `terraform/argocd/variables.tf` змініть:
-- `app_repo_url` → `https://github.com/<your-account>/<this-repo>.git`
-- `app_repo_branch` → `lesson-7` (або іншу гілку, яку будете пушити)
-
-Також перевірте:
-- `aws_profile`, `aws_region`
-- `eks_state_bucket`, `eks_state_key`, `eks_state_region` — щоб вказували на ваш **remote state EKS**
-
-### 2) Розгорніть ArgoCD через Terraform
+### 1. Підняти EKS-кластер
 ```bash
-cd terraform/argocd
-terraform init -reconfigure
-terraform plan
+cd terraform/eks-cluster
+terraform init
 terraform apply
 ```
-Перевірте pod-и:
+
+### 2. Розгорнути ArgoCD через Terraform
+```bash
+cd terraform/argocd
+terraform init
+terraform apply -var="cluster_name=mlops-eks-cluster"
+```
+
+### 3. Перевірити pod-и ArgoCD
 ```bash
 kubectl get pods -n infra-tools
 ```
 
-### 3) Вхід у UI ArgoCD
+### 4. Увійти в ArgoCD UI
+Отримати пароль:
 ```bash
-# пароль адміністратора
-kubectl -n infra-tools get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
-
-# локальний доступ
+kubectl -n infra-tools get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+Port-forward:
+```bash
 kubectl port-forward svc/argocd-server -n infra-tools 8080:80
 ```
-Відкрийте `http://localhost:8080` (login: `admin`, password: з команди вище).
+Відкрити [http://localhost:8080](http://localhost:8080), логін `admin`, пароль – див. вище.
 
-### 4) Перевірте ApplicationSet
+### 5. Перевірити деплой MLflow
 ```bash
-kubectl -n infra-tools get deploy argocd-applicationset-controller
-kubectl -n infra-tools get applicationsets.argoproj.io
-```
-
-### 5) Переконайтеся, що створився застосунок MLflow
-ApplicationSet сканує **цей самий репозиторій** за шляхами:
-- `gitops/namespaces/*`
-- `gitops/apps/*`
-
-Має з’явитися `Application` з ім’ям **mlflow** (із `gitops/apps/mlflow/application.yaml`).
-
-CLI:
-```bash
-kubectl -n infra-tools get applications.argoproj.io
-```
-
-UI: перевірте статус синхронізації; має створити ресурси в namespace `application`.
-
-### 6) Перевірка подів і доступу
-```bash
+kubectl get applications -n infra-tools
 kubectl get pods -n application
-kubectl -n application get deploy,svc
-# локальний доступ (ім'я деплойменту див. у виводі get deploy)
-kubectl -n application port-forward deploy/<mlflow-deploy-name> 5000:5000
-# тепер відкрийте http://localhost:5000
+```
+
+### 6. Відкрити MLflow сервіс
+```bash
+kubectl -n application port-forward deploy/mlflow 5000:5000
+```
+Відкрити [http://localhost:5000](http://localhost:5000)
+
+### 7. Видалення інфраструктури
+```bash
+cd terraform/argocd
+terraform destroy
+cd ../eks-cluster
+terraform destroy
 ```
 
 ---
 
-## Знищення ресурсів (обовʼязково після перевірки)
-```bash
-cd terraform/argocd
-terraform destroy
+## 📂 Структура проєкту
 ```
-
-## Примітки
-- `argocd-values.yaml` містить ClusterIP, extraArgs, RBAC, timeouts і `applicationSet.enabled: true`.
-- У `gitops/apps/mlflow/application.yaml` зафіксуйте конкретну версію `targetRevision` під ваш кластер/Helm.
-- Якщо потрібно, можете додати інші апки під `gitops/apps/<app-name>/application.yaml` — ApplicationSet підхопить їх автоматично.
-
-Успіхів! 🚀
+terraform/
+ ├── eks-cluster/              # Terraform для створення EKS
+ └── argocd/                   # Terraform для ArgoCD
+     ├── main.tf
+     ├── variables.tf
+     ├── providers.tf
+     ├── outputs.tf
+     ├── backend.tf
+     └── values/
+         └── argocd-values.yaml
+goit-argo/
+ ├── application.yaml          # ArgoCD Application для MLflow
+ └── namespaces/
+     ├── application/ns.yaml
+     └── infra-tools/ns.yaml
+README.md
+```

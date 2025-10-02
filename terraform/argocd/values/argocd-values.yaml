@@ -1,0 +1,14 @@
+configs:
+  cm:
+    timeout.reconciliation: 30s
+  rbac:
+    policy.default: role:readonly
+
+server:
+  service:
+    type: ClusterIP
+  extraArgs:
+    - --insecure
+
+redis:
+  enabled: true
