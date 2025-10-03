@@ -2,16 +2,16 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: minio
-  namespace: argocd
+  namespace: infra-tools
 spec:
   destination:
-    namespace: application
+    namespace: infra-tools
     server: https://kubernetes.default.svc
   project: default
   source:
     repoURL: https://charts.bitnami.com/bitnami
     chart: minio
-    targetRevision: 13.7.2
+    targetRevision: 13.8.4
     helm:
       valuesObject:
         auth:
@@ -22,6 +22,9 @@ spec:
           type: ClusterIP
         persistence:
           enabled: false
+        image:
+          repository: docker.io/bitnami/minio
+          tag: 2025.3.12-debian-12-r1
   syncPolicy:
     automated:
       prune: true
